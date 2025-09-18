@@ -1,0 +1,6 @@
+{
+  "appId": "com.example.gestionsquadre",
+  "appName": "Gestione Squadre",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

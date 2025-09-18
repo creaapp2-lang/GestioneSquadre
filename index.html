@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestione Squadre Sportive</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="theme-color" content="#10b981">
+  <style>
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem .75rem;border-radius:.75rem;font-size:.875rem;font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.05);border:1px solid transparent;cursor:pointer}
+    .btn-primary{background:#10b981;color:#fff}
+    .btn-primary:hover{background:#0ea371}
+    .btn-outline{background:#fff;border-color:#d1d5db}
+    .btn-outline:hover{background:#f9fafb}
+    .btn-ghost{color:#4b5563;background:transparent}
+    .btn-ghost:hover{background:#f3f4f6}
+    .btn-danger{color:#dc2626;background:transparent}
+    .btn-sm{padding:.375rem .5rem;font-size:.8125rem}
+    .btn-xs{padding:.125rem .375rem;font-size:.75rem}
+    .chip{display:inline-flex;align-items:center;padding:.25rem .5rem;border-radius:9999px;font-size:.75rem;font-weight:600}
+    .input{width:100%;padding:.5rem .75rem;border:1px solid #e5e7eb;border-radius:.75rem}
+    .input:focus{outline:none;box-shadow:0 0 0 2px rgba(16,185,129,.3);border-color:#10b981}
+    .label{font-size:.875rem;font-weight:600;color:#374151}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:1rem;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+    .card-header{padding:1rem 1rem .5rem;display:flex;align-items:center;justify-content:space-between}
+    .card-title{font-size:1rem;font-weight:700}
+    .card-body{padding:0 1rem 1rem}
+    .tab{padding:.5rem .75rem;border-radius:.75rem;font-size:.875rem;font-weight:600}
+    .tab-active{background:#10b981;color:#fff}
+    .st-ok{background:#d1fae5;color:#065f46}
+    .st-miss{background:#dbeafe;color:#1e40af}
+    .st-warn{background:#fef3c7;color:#92400e}
+    .st-alt{background:#fee2e2;color:#991b1b}
+    dialog::backdrop{background:rgba(0,0,0,.4)}
+    dialog.fallback{position:fixed;inset:0;display:none;border:0;background:transparent}
+    dialog.fallback[open]{display:block}
+    dialog.fallback .card{max-width:40rem;margin:10vh auto;background:#fff}
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+  <header class="sticky top-0 z-10 bg-white border-b">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white text-xl font-bold">GS</span>
+        <div>
+          <h1 class="text-xl font-semibold">Gestione Squadre Sportive</h1>
+          <p class="text-sm text-gray-500">Scadenze • Gare • Album • Reminder</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-ask-notify" class="btn btn-outline" title="Abilita notifiche">🔔 Notifiche</button>
+        <button id="btn-add-team" class="btn btn-primary">➕ Aggiungi squadra</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="app" class="max-w-5xl mx-auto px-4 py-4"></main>
+
+  <dialog id="modal" class="rounded-2xl p-0 w-[92vw] max-w-2xl fallback">
+    <form method="dialog">
+      <header class="card-header">
+        <div class="card-title" id="modal-title">Titolo</div>
+        <button class="btn btn-ghost" id="modal-close" aria-label="Chiudi">✕</button>
+      </header>
+      <div class="card-body" id="modal-body"></div>
+      <div class="px-4 pb-4 flex items-center justify-end gap-2" id="modal-actions"></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-black text-white text-sm px-3 py-2 rounded-xl hidden"></div>
+
+  <script>
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const uid = () => Math.random().toString(36).slice(2,10);
+  const todayISO = () => new Date().toISOString().slice(0,10);
+  const itDate = (d) => { if(!d) return ''; const date = typeof d === 'string' ? new Date(d) : d; return date.toLocaleDateString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric' }); };
+  const daysUntil = (iso) => { if(!iso) return undefined; const now = new Date(); const target = new Date(iso); const a = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()); const b = Date.UTC(target.getFullYear(), target.getMonth(), target.getDate()); return Math.round((b - a) / 86400000); };
+  const nextBirthdayISO = (dobISO) => { if (!dobISO) return undefined; const dob = new Date(dobISO); const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); let next = new Date(now.getFullYear(), dob.getMonth(), dob.getDate()); if (next < today) next = new Date(now.getFullYear()+1, dob.getMonth(), dob.getDate()); return next.toISOString().slice(0,10); };
+  const storage = { get(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }, set(key, value){ try { localStorage.setItem(key, JSON.stringify(value)); } catch {} } };
+  function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), 1800); }
+  function statusForAthlete(a){ const required=[['nome','Nome'],['cognome','Cognome'],['certificatoScadenza','Cert. Medico'],['autocertScadenza','Autocertificazione'],['codiceFiscale','Codice Fiscale'],['cartaIdentitaNumero',"Carta d'identità"],['dataNascita','Data nascita']]; const missing=required.filter(([k])=>a[k]==null||a[k]==='').map(([,l])=>l); const warn=[]; const alt=[]; const certLeft=daysUntil(a.certificatoScadenza); const autoLeft=daysUntil(a.autocertScadenza); if(certLeft!=null){ if(certLeft<0)alt.push('Cert. Medico scaduto'); else if(certLeft<30)warn.push(`Cert. Medico in ${certLeft}g`);} if(autoLeft!=null){ if(autoLeft<0)alt.push('Autocert. scaduta'); else if(autoLeft<30)warn.push(`Autocert. in ${autoLeft}g`);} const code=alt.length?'alt':(missing.length?'miss':(warn.length?'warn':'ok')); const reason=[]; if(missing.length)reason.push('Dati mancanti: '+missing.join(', ')); reason.push(...warn,...alt); return {code,reason}; }
+  const classForStatus = (code)=>({ok:'st-ok',miss:'st-miss',warn:'st-warn',alt:'st-alt'})[code];
+  const labelForStatus = (code)=>({ok:'OK',miss:'Miss',warn:'Warn',alt:'ALT!'})[code];
+
+  let state = { teams: storage.get('gs_teams', []), activeTeamId: null, activeTab: 'dati' };
+  function save(){ storage.set('gs_teams', state.teams); }
+
+  const modal = $('#modal');
+  const supportsDialog = typeof modal.showModal === 'function';
+  function openModal(title, bodyEl, actions=[]){ $('#modal-title').textContent=title; const body=$('#modal-body'); body.innerHTML=''; body.appendChild(bodyEl); const act=$('#modal-actions'); act.innerHTML=''; actions.forEach(a=>{ const btn=document.createElement('button'); btn.type='button'; btn.className='btn '+(a.variant||'btn-primary'); btn.textContent=a.label; btn.addEventListener('click', a.onClick); act.appendChild(btn); }); if(supportsDialog) modal.showModal(); else modal.setAttribute('open',''); }
+  function closeModal(){ if(supportsDialog) modal.close(); else modal.removeAttribute('open'); }
+  $('#modal-close').addEventListener('click',(e)=>{ e.preventDefault(); closeModal(); });
+  modal.addEventListener('close', ()=>{ $('#modal-body').innerHTML=''; $('#modal-actions').innerHTML=''; });
+
+  function render(){ const root=$('#app'); root.innerHTML=''; if(!state.activeTeamId){ renderHome(root); } else { renderTeam(root, state.teams.find(t=>t.id===state.activeTeamId)); } }
+
+  function teamCounters(team){ let warn=0,alt=0,birthdays=0; team.atlete.forEach(a=>{ const st=statusForAthlete(a); if(st.code==='warn')warn++; if(st.code==='alt')alt++; if(a.dataNascita){ const nb=nextBirthdayISO(a.dataNascita); const diff=daysUntil(nb); if(diff!=null && diff>=0 && diff<=14) birthdays++; } }); return {warn,alt,birthdays}; }
+
+  function renderHome(root){ if(state.teams.length===0){ const card=document.createElement('div'); card.className='card'; card.innerHTML='<div class="card-header"><div class="card-title">Benvenuto 👋</div></div><div class="card-body text-gray-600">Crea la tua prima squadra con il pulsante “Aggiungi squadra”.</div>'; root.appendChild(card); }
+    const grid=document.createElement('div'); grid.className='grid grid-cols-1 md:grid-cols-2 gap-3';
+    state.teams.forEach(t=>{ const c=teamCounters(t); const btn=document.createElement('button'); btn.className='text-left'; btn.innerHTML=`
+      <div class="card hover:shadow-md transition-shadow">
+        <div class="card-header">
+          <div class="card-title truncate">${escapeHtml(t.nome)}</div>
+          <div class="flex items-center gap-2">
+            ${c.birthdays?`<span title="Compleanni prossimi 14 giorni" class="chip" style="background:#fde68a;color:#92400e">🔔 ${c.birthdays}</span>`:''}
+            ${c.warn?`<span title="Avvisi (<30gg)" class="inline-flex h-5 w-5 items-center justify-center rounded-full text-white text-xs font-bold" style="background:#f59e0b">${c.warn}</span>`:''}
+            ${c.alt?`<span title="Critici (scaduti)" class="inline-flex h-5 w-5 items-center justify-center rounded-full text-white text-xs font-bold" style="background:#ef4444">${c.alt}</span>`:''}
+          </div>
+        </div>
+        <div class="card-body text-sm text-gray-600 flex items-center justify-between">
+          <div class="flex gap-4">
+            <span><strong>${t.atlete.length}</strong> atlete</span>
+            <span><strong>${t.gare.length}</strong> gare</span>
+            <span><strong>${t.albums.length}</strong> album</span>
+          </div>
+          <span class="text-emerald-700">Apri →</span>
+        </div>
+      </div>`; btn.addEventListener('click', ()=>{ state.activeTeamId=t.id; state.activeTab='dati'; render(); }); grid.appendChild(btn); });
+    root.appendChild(grid);
+  }
+
+  function renderTeam(root, team){
+    const wrapper=document.createElement('div'); wrapper.className='space-y-4';
+    const top=document.createElement('div'); top.className='flex items-center justify-between gap-2';
+    top.innerHTML=`
+      <div class="flex items-center gap-2">
+        <button class="btn btn-outline" id="back-btn">← Indietro</button>
+        <h2 class="text-lg font-semibold">${escapeHtml(team.nome)}</h2>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost" id="rename-btn">⚙ Modifica nome</button>
+        <button class="btn btn-danger" id="delete-team-btn">Elimina</button>
+      </div>`;
+    wrapper.appendChild(top);
+    $('#back-btn', top).addEventListener('click', ()=>{ state.activeTeamId=null; render(); });
+    $('#rename-btn', top).addEventListener('click', ()=>{ const body=document.createElement('div'); body.innerHTML=`<label class="label">Nuovo nome</label><input class="input mt-1" id="new-team-name" value="${escapeAttr(team.nome)}" />`; openModal('Rinomina squadra', body, [{label:'Annulla',variant:'btn-outline',onClick:()=>closeModal()},{label:'Salva',onClick:()=>{ team.nome=$('#new-team-name',body).value.trim()||team.nome; save(); closeModal(); render(); }}]); });
+    $('#delete-team-btn', top).addEventListener('click', ()=>{ if(!confirm('Eliminare la squadra?')) return; state.teams=state.teams.filter(x=>x.id!==team.id); state.activeTeamId=null; save(); render(); });
+
+    const summary={warn:[],crit:[],bdays:[]};
+    team.atlete.forEach(a=>{ const st=statusForAthlete(a); const nm=((a.nome||'')+' '+(a.cognome||'')).trim(); if(st.code==='warn') summary.warn.push(nm); if(st.code==='alt') summary.crit.push(nm); if(a.dataNascita){ const diff=daysUntil(nextBirthdayISO(a.dataNascita)); if(diff!=null && diff>=0 && diff<=14) summary.bdays.push(`${nm} (${diff}g)`);} });
+    const notifGrid=document.createElement('div'); notifGrid.className='grid grid-cols-1 md:grid-cols-3 gap-3'; let show=false;
+    if(summary.warn.length){show=true; notifGrid.appendChild(notifCard('Avvisi scadenza (< 30 giorni)', summary.warn));}
+    if(summary.crit.length){show=true; notifGrid.appendChild(notifCard('Critici (scaduti)', summary.crit));}
+    if(summary.bdays.length){show=true; notifGrid.appendChild(notifCard('Compleanni imminenti (≤14g)', summary.bdays));}
+    if(show) wrapper.appendChild(notifGrid);
+
+    const tabs=document.createElement('div');
+    tabs.innerHTML=`
+      <div class="grid grid-cols-4 gap-2">
+        <button data-tab="dati" class="tab ${state.activeTab==='dati'?'tab-active':''}">Dati</button>
+        <button data-tab="gare" class="tab ${state.activeTab==='gare'?'tab-active':''}">Gare</button>
+        <button data-tab="album" class="tab ${state.activeTab==='album'?'tab-active':''}">Album</button>
+        <button data-tab="scouting" class="tab ${state.activeTab==='scouting'?'tab-active':''}">Scouting</button>
+      </div>
+      <div id="tab-content" class="mt-3"></div>`;
+    wrapper.appendChild(tabs); root.appendChild(wrapper);
+    $$('.tab', tabs).forEach(b=>b.addEventListener('click', (e)=>{ state.activeTab=e.currentTarget.getAttribute('data-tab'); render(); }));
+
+    const content=$('#tab-content', tabs);
+    if(state.activeTab==='dati') renderDataTab(content, team);
+    if(state.activeTab==='gare') renderGamesTab(content, team);
+    if(state.activeTab==='album') renderAlbumsTab(content, team);
+    if(state.activeTab==='scouting') content.innerHTML='<div class="card"><div class="card-body text-center text-gray-600 py-8">Coming Soon…</div></div>';
+  }
+
+  function notifCard(title, items){ const card=document.createElement('div'); card.className='card'; card.innerHTML=`<div class="card-header pt-3 pb-1"><div class="card-title text-sm">${title}</div></div><div class="card-body text-sm text-gray-700 space-y-1"></div>`; const body=$('.card-body', card); items.slice(0,6).forEach(n=>{ const d=document.createElement('div'); d.textContent='• '+n; body.appendChild(d); }); if(items.length>6){ const x=document.createElement('div'); x.className='text-xs text-gray-500'; x.textContent='+'+(items.length-6)+' altri…'; body.appendChild(x);} return card; }
+
+  function renderDataTab(root, team){ const card=document.createElement('div'); card.className='card'; card.innerHTML=`
+    <div class="card-header"><div class="card-title">Atlete</div><button class="btn btn-primary" id="add-athlete">➕ Aggiungi</button></div>
+    <div class="card-body"><div id="athlete-list" class="divide-y"></div></div>`; root.appendChild(card);
+    $('#add-athlete', card).addEventListener('click', ()=>{ const a={id:uid(),nome:'',cognome:''}; team.atlete.push(a); save(); renderAthleteList($('#athlete-list', card), team); openAthleteDetail(team,a); });
+    renderAthleteList($('#athlete-list', card), team);
+  }
+
+  function renderAthleteList(container, team){ container.innerHTML=''; if(team.atlete.length===0){ const empty=document.createElement('div'); empty.className='py-6 text-center text-gray-500'; empty.textContent='Nessuna atleta. Aggiungi con il pulsante qui sopra.'; container.appendChild(empty); return; }
+    team.atlete.forEach(a=>{ const st=statusForAthlete(a); const row=document.createElement('div'); row.className='py-2 flex items-center gap-3'; row.innerHTML=`
+      <button class="flex-1 text-left">
+        <div class="flex items-center justify-between">
+          <div class="truncate">
+            <div class="font-medium truncate">${escapeHtml(a.nome||'—')} ${escapeHtml(a.cognome||'')}</div>
+            <div class="text-xs text-gray-500 truncate">Tel: ${escapeHtml(a.cellulare||'—')} · N° ${escapeHtml(a.numeroMaglia||'—')} · Ruolo: ${escapeHtml(a.ruolo||'—')}</div>
+          </div>
+          <span class="chip ${classForStatus(st.code)}">${labelForStatus(st.code)}</span>
+        </div>
+      </button>
+      ${a.cellulare?`<a href="tel:${a.cellulare}" class="px-2 py-1 rounded-lg" style="background:#ecfdf5;color:#047857" title="Chiama">📞</a>`:''}
+      <button class="btn btn-ghost btn-sm text-red-600">Elimina</button>`;
+      $('button.flex-1', row).addEventListener('click', ()=>openAthleteDetail(team, a));
+      $('.btn-ghost', row).addEventListener('click', ()=>{ if(!confirm("Rimuovere l'atleta?")) return; team.atlete=team.atlete.filter(x=>x.id!==a.id); save(); render(); });
+      container.appendChild(row);
+    });
+  }
+
+  function openAthleteDetail(team, a){ const body=document.createElement('div'); body.className='space-y-3'; body.innerHTML=`
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="label">Nome</label><input class="input mt-1" id="nome" value="${escapeAttr(a.nome||'')}" /></div>
+      <div><label class="label">Cognome</label><input class="input mt-1" id="cognome" value="${escapeAttr(a.cognome||'')}" /></div>
+      <div><label class="label">Scadenza Cert. Medico</label><input type="date" class="input mt-1" id="cert" value="${escapeAttr(a.certificatoScadenza||'')}" /></div>
+      <div><label class="label">Cellulare</label><input class="input mt-1" id="cell" inputmode="tel" placeholder="es. 3331234567" value="${escapeAttr(a.cellulare||'')}" /></div>
+      <div><label class="label">Taglia Maglia</label><input class="input mt-1" id="maglia" value="${escapeAttr(a.tagliaMaglia||'')}" /></div>
+      <div><label class="label">Taglia Calzone</label><input class="input mt-1" id="calzone" value="${escapeAttr(a.tagliaCalzone||'')}" /></div>
+      <div><label class="label">Ruolo</label><input class="input mt-1" id="ruolo" value="${escapeAttr(a.ruolo||'')}" /></div>
+      <div><label class="label">Scadenza Autocertificazione</label><input type="date" class="input mt-1" id="auto" value="${escapeAttr(a.autocertScadenza||'')}" /></div>
+      <div class="col-span-2 grid grid-cols-2 gap-3">
+        <div>
+          <label class="label">Carta d'identità (numero)</label>
+          <input class="input mt-1" id="cin" value="${escapeAttr(a.cartaIdentitaNumero||'')}" />
+          <div class="flex items-center gap-2 mt-2">
+            <label class="text-sm text-blue-700 cursor-pointer inline-flex items-center gap-2">⬆️ <input id="ciimg" type="file" accept="image/*" class="hidden" /> Allega/visualizza immagine</label>
+            ${a.cartaIdentitaImg?'<button id="ciopen" class="btn btn-outline btn-sm">👁️ Visualizza</button>':''}
+            ${a.cartaIdentitaImg?'<button id="ciremove" class="btn btn-ghost btn-sm">✕</button>':''}
+          </div>
+        </div>
+        <div>
+          <label class="label">Codice Fiscale</label>
+          <input class="input mt-1" id="cf" value="${escapeAttr(a.codiceFiscale||'')}" />
+          <div class="flex items-center gap-2 mt-2">
+            <label class="text-sm text-blue-700 cursor-pointer inline-flex items-center gap-2">⬆️ <input id="cfimg" type="file" accept="image/*" class="hidden" /> Allega/visualizza immagine</label>
+            ${a.codiceFiscaleImg?'<button id="cfopen" class="btn btn-outline btn-sm">👁️ Visualizza</button>':''}
+            ${a.codiceFiscaleImg?'<button id="cfremove" class="btn btn-ghost btn-sm">✕</button>':''}
+          </div>
+        </div>
+      </div>
+      <div><label class="label">Numero Maglia</label><input class="input mt-1" id="num" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(a.numeroMaglia||'')}" /></div>
+      <div><label class="label">Matricola</label><input class="input mt-1" id="matr" value="${escapeAttr(a.matricola||'')}" /></div>
+      <div><label class="label">Data di nascita</label><input type="date" class="input mt-1" id="dob" value="${escapeAttr(a.dataNascita||'')}" /></div>
+      <div class="flex items-center gap-2 pt-6"><input id="tess" type="checkbox" ${a.tesseramento?'checked':''}/> <label for="tess" class="label">Tesseramento</label></div>
+      <div class="flex items-center gap-2 pt-6"><input id="iscr" type="checkbox" ${a.iscrizioneOk?'checked':''}/> <label for="iscr" class="label">Iscrizione (€)</label></div>
+    </div>`;
+    body.addEventListener('change', (e)=>{ const el=e.target; if(el.id==='ciimg'||el.id==='cfimg'){ const file=el.files&&el.files[0]; if(!file)return; const r=new FileReader(); r.onload=()=>{ if(el.id==='ciimg'){ a.cartaIdentitaImg=r.result; } else { a.codiceFiscaleImg=r.result; } save(); closeModal(); openAthleteDetail(team, a); }; r.readAsDataURL(file); } });
+    openModal('Dettaglio Atleta', body, [
+      {label:'Indietro',variant:'btn-outline',onClick:()=>closeModal()},
+      {label:'Salva',onClick:()=>{ a.nome=$('#nome',body).value.trim(); a.cognome=$('#cognome',body).value.trim(); a.certificatoScadenza=$('#cert',body).value||undefined; a.cellulare=$('#cell',body).value.trim()||undefined; a.tagliaMaglia=$('#maglia',body).value.trim()||undefined; a.tagliaCalzone=$('#calzone',body).value.trim()||undefined; a.ruolo=$('#ruolo',body).value.trim()||undefined; a.autocertScadenza=$('#auto',body).value||undefined; a.cartaIdentitaNumero=$('#cin',body).value.trim()||undefined; a.codiceFiscale=$('#cf',body).value.trim()||undefined; const num=$('#num',body).value.trim(); if(/^[0-9]*$/.test(num)) a.numeroMaglia=num||undefined; a.matricola=$('#matr',body).value.trim()||undefined; a.dataNascita=$('#dob',body).value||undefined; a.tesseramento=$('#tess',body).checked; a.iscrizioneOk=$('#iscr',body).checked; save(); closeModal(); render(); }}
+    ]);
+    setTimeout(()=>{ $('#ciopen',body)?.addEventListener('click', ()=>window.open(a.cartaIdentitaImg,'_blank')); $('#cfopen',body)?.addEventListener('click', ()=>window.open(a.codiceFiscaleImg,'_blank')); $('#ciremove',body)?.addEventListener('click', ()=>{ a.cartaIdentitaImg=undefined; save(); closeModal(); openAthleteDetail(team, a); }); $('#cfremove',body)?.addEventListener('click', ()=>{ a.codiceFiscaleImg=undefined; save(); closeModal(); openAthleteDetail(team, a); }); },0);
+  }
+
+  function renderGamesTab(root, team){ const card=document.createElement('div'); card.className='space-y-3'; root.appendChild(card);
+    const head=document.createElement('div'); head.className='flex items-center justify-between'; card.appendChild(head);
+    const d=buildCursor(); head.appendChild(d.container);
+    const right=document.createElement('div'); right.className='flex items-center gap-2'; right.innerHTML=`<button class="btn btn-outline" id="copy7">📋 Copia partite 7gg</button><button class="btn btn-primary" id="syncgc">📆 Sincronizza Google Calendar</button>`; head.appendChild(right);
+    $('#copy7', right).addEventListener('click', ()=>{ const today=new Date(); const until=new Date(); until.setDate(today.getDate()+7); const list=team.gare.filter(g=>{ const dt=new Date(g.dataISO); const t0=new Date(today.getFullYear(), today.getMonth(), today.getDate()); return dt>=t0 && dt<=until; }).sort((a,b)=>a.dataISO.localeCompare(b.dataISO)).map(g=>`${itDate(g.dataISO)} ${g.orario||''} – ${team.nome} vs ${g.avversaria||'—'} (${g.campionato||'—'}) @ ${g.luogo||'—'}`).join('\n'); navigator.clipboard.writeText(list||'Nessuna gara nei prossimi 7 giorni.').then(()=>toast('Elenco copiato negli appunti')).catch(()=>toast('Errore copia negli appunti')); });
+    $('#syncgc', right).addEventListener('click', ()=>{ const ics=buildICS(team, team.gare); downloadFile(`gare_${team.nome.replace(/[^a-z0-9]/gi,'_')}.ics`, ics, 'text/calendar'); });
+    const weekdays=['Lun','Mar','Mer','Gio','Ven','Sab','Dom']; const headRow=document.createElement('div'); headRow.className='grid grid-cols-7 text-xs font-medium text-gray-500'; headRow.innerHTML=weekdays.map(d=>`<div class="p-2">${d}</div>`).join(''); card.appendChild(headRow);
+    const grid=document.createElement('div'); grid.className='grid grid-cols-7 gap-1'; card.appendChild(grid);
+    const renderGrid=()=>{ grid.innerHTML=''; const matrix=buildMonthMatrix(d.cursorDate); matrix.forEach(cell=>{ const cellEl=document.createElement('div'); cellEl.className='min-h-[84px] rounded-xl border bg-white p-2 flex flex-col '+(cell.inMonth?'':'opacity-40')+(cell.dateISO===todayISO()?' ring-2 ring-emerald-500':''); cellEl.innerHTML=`<div class="flex items-center justify-between"><div class="text-xs text-gray-500">${cell.day}</div><button class="btn btn-ghost btn-xs" title="Aggiungi gara">➕</button></div><div class="mt-1 space-y-1"></div>`; const addBtn=$('button',cellEl); addBtn.addEventListener('click', ()=>openGameEditor(cell.dateISO,null,team)); const list=$('.mt-1', cellEl); team.gare.filter(g=>g.dataISO===cell.dateISO).forEach(g=>{ const item=document.createElement('div'); item.className='text-[11px] leading-tight p-1 rounded-md'; item.style.background='#ecfdf5'; item.innerHTML=`<div class="font-medium truncate">${g.orario||'--:--'} · vs ${escapeHtml(g.avversaria||'—')}</div><div class="text-gray-600 truncate">${escapeHtml(g.campionato||'—')} @ ${escapeHtml(g.luogo||'—')}</div><div class="flex gap-2 mt-1"><button class="btn btn-outline btn-xs">Modifica</button><button class="btn btn-ghost btn-xs text-red-600">Elimina</button></div>`; const [editBtn, delBtn]=$$('.btn', item); editBtn.addEventListener('click', ()=>openGameEditor(cell.dateISO,g,team)); delBtn.addEventListener('click', ()=>{ if(!confirm('Rimuovere la gara?')) return; team.gare=team.gare.filter(x=>x.id!==g.id); save(); renderGrid(); }); list.appendChild(item); }); grid.appendChild(cellEl); }); };
+    renderGrid(); d.onChange=()=>renderGrid();
+  }
+
+  function buildCursor(){ const container=document.createElement('div'); container.className='flex items-center gap-2'; const d=new Date(); let cursorDate=new Date(d.getFullYear(), d.getMonth(), 1); const label=document.createElement('div'); label.className='text-lg font-semibold capitalize'; const prev=document.createElement('button'); prev.className='btn btn-outline'; prev.textContent='←'; const next=document.createElement('button'); next.className='btn btn-outline'; next.textContent='→'; container.appendChild(prev); container.appendChild(label); container.appendChild(next); function updateLabel(){ label.textContent=cursorDate.toLocaleDateString('it-IT',{month:'long',year:'numeric'});} const c={container, get cursorDate(){return cursorDate;}, set cursorDate(v){cursorDate=v; updateLabel();}, onChange:null}; prev.addEventListener('click', ()=>{ c.cursorDate=new Date(cursorDate.getFullYear(), cursorDate.getMonth()-1, 1); c.onChange && c.onChange(); }); next.addEventListener('click', ()=>{ c.cursorDate=new Date(cursorDate.getFullYear(), cursorDate.getMonth()+1, 1); c.onChange && c.onChange(); }); updateLabel(); return c; }
+
+  function buildMonthMatrix(firstOfMonth){ const y=firstOfMonth.getFullYear(); const m=firstOfMonth.getMonth(); const first=new Date(y,m,1); const startDay=(first.getDay()+6)%7; const daysInMonth=new Date(y,m+1,0).getDate(); const prevMonthDays=new Date(y,m,0).getDate(); const cells=[]; for(let i=0;i<startDay;i++){ const day=prevMonthDays-startDay+i+1; const d=new Date(y,m-1,day); cells.push({day, dateISO:d.toISOString().slice(0,10), inMonth:false}); } for(let d=1; d<=daysInMonth; d++){ const date=new Date(y,m,d); cells.push({day:d, dateISO:date.toISOString().slice(0,10), inMonth:true}); } while(cells.length%7!==0 || cells.length<42){ const last=cells[cells.length-1]; const nextDate=new Date(new Date(last.dateISO).getTime()+86400000); cells.push({day:nextDate.getDate(), dateISO:nextDate.toISOString().slice(0,10), inMonth:false}); } return cells; }
+
+  function openGameEditor(dateISO, game, team){ const isEdit=!!game; const body=document.createElement('div'); body.className='space-y-3'; const f={dataISO:dateISO, orario:game?.orario||'', campionato:game?.campionato||'', avversaria:game?.avversaria||'', luogo:game?.luogo||'', note:game?.note||''}; body.innerHTML=`<div><label class="label">Data</label><input type="date" class="input mt-1" id="gdate" value="${escapeAttr(f.dataISO)}" /></div><div class="grid grid-cols-2 gap-3"><div><label class="label">Orario</label><input type="time" class="input mt-1" id="ghour" value="${escapeAttr(f.orario)}" /></div><div><label class="label">Campionato</label><input class="input mt-1" id="gcamp" value="${escapeAttr(f.campionato)}" /></div><div><label class="label">Avversaria</label><input class="input mt-1" id="gopp" value="${escapeAttr(f.avversaria)}" /></div><div><label class="label">Luogo</label><input class="input mt-1" id="gplace" value="${escapeAttr(f.luogo)}" /></div></div><div><label class="label">Note</label><input class="input mt-1" id="gnote" value="${escapeAttr(f.note)}" /></div>`;
+    const saveAction=()=>{ const patch={ dataISO:$('#gdate',body).value||f.dataISO, orario:$('#ghour',body).value||undefined, campionato:$('#gcamp',body).value.trim()||undefined, avversaria:$('#gopp',body).value.trim()||undefined, luogo:$('#gplace',body).value.trim()||undefined, note:$('#gnote',body).value.trim()||undefined }; if(isEdit){ Object.assign(game, patch); } else { team.gare.push({ id:uid(), ...patch }); } save(); closeModal(); render(); };
+    openModal(isEdit?'Modifica gara':'Nuova gara', body, [{label:'Annulla',variant:'btn-outline',onClick:()=>closeModal()},{label:isEdit?'Salva':'Aggiungi', onClick:saveAction}]);
+  }
+
+  function buildICS(team, games){ const lines=[]; lines.push('BEGIN:VCALENDAR'); lines.push('VERSION:2.0'); lines.push('PRODID:-//Gestione Squadre//IT'); games.forEach(g=>{ const date=(g.dataISO||'').replace(/-/g,''); const time=((g.orario||'09:00').replace(':',''))+'00'; const uidStr=(g.id||uid())+'@gestione-squadre.local'; const dtstart=`${date}T${time}`; const [hh,mm]=(g.orario||'09:00').split(':').map(Number); const end=new Date(`${g.dataISO}T${g.orario||'09:00'}:00`); end.setHours((hh||9)+2); const dtend=`${end.getFullYear()}${String(end.getMonth()+1).padStart(2,'0')}${String(end.getDate()).padStart(2,'0')}T${String(end.getHours()).padStart(2,'0')}${String(end.getMinutes()).padStart(2,'0')}00`; const title=`${team.nome} vs ${g.avversaria||'—'}`; const desc=`Campionato: ${g.campionato||'—'}\nNote: ${g.note||''}`; lines.push('BEGIN:VEVENT'); lines.push('UID:'+uidStr); lines.push('DTSTART:'+dtstart); lines.push('DTEND:'+dtend); lines.push('SUMMARY:'+title); if(g.luogo) lines.push('LOCATION:'+escapeICS(g.luogo)); if(desc) lines.push('DESCRIPTION:'+escapeICS(desc)); lines.push('END:VEVENT'); }); lines.push('END:VCALENDAR'); return lines.join('\r\n'); }
+  function escapeICS(s){ return String(s).replace(/[\n,;]/g, m=>({'\n':'\\n',',':'\\,',';':'\\;'}[m])); }
+
+  function renderAlbumsTab(root, team){ const wrap=document.createElement('div'); wrap.className='space-y-4'; root.appendChild(wrap);
+    const listCard=document.createElement('div'); listCard.className='card'; listCard.innerHTML=`<div class="card-header"><div class="card-title">Album</div><div class="flex items-center gap-2"><input class="input w-48" id="new-album-title" placeholder="Titolo nuovo album" /><button class="btn btn-primary" id="create-album">➕ Crea</button></div></div><div class="card-body" id="albums-list"></div>`; wrap.appendChild(listCard);
+    $('#create-album', listCard).addEventListener('click', ()=>{ const title=$('#new-album-title', listCard).value.trim(); if(!title) return; team.albums.push({ id:uid(), titolo:title, immagini:[] }); $('#new-album-title', listCard).value=''; save(); renderAlbums(); });
+    function renderAlbums(){ const container=$('#albums-list', listCard); container.innerHTML=''; if(team.albums.length===0){ container.innerHTML='<div class="text-gray-500">Nessun album. Creane uno nuovo.</div>'; return; } const grid=document.createElement('div'); grid.className='grid grid-cols-1 md:grid-cols-2 gap-3'; team.albums.forEach(alb=>{ const card=document.createElement('div'); card.className='card hover:shadow-md transition'; card.innerHTML=`<div class="card-header"><div class="card-title truncate">${escapeHtml(alb.titolo)}</div><div class="flex items-center gap-2"><button class="btn btn-outline btn-sm" data-open>Apri</button><button class="btn btn-ghost btn-sm text-red-600" data-del>Elimina</button></div></div><div class="card-body"><div class="grid grid-cols-4 gap-2">${alb.immagini.slice(0,8).map(img=>`<img src="${img.url}" class="aspect-square object-cover rounded-md" />`).join('')}</div>${alb.immagini.length===0?'<div class="text-sm text-gray-500">Album vuoto</div>':''}</div>`; $('[data-open]', card).addEventListener('click', ()=>openAlbum(alb)); $('[data-del]', card).addEventListener('click', ()=>{ if(!confirm("Eliminare l'album?")) return; team.albums = team.albums.filter(x=>x.id!==alb.id); save(); renderAlbums(); }); grid.appendChild(card); }); container.appendChild(grid); } renderAlbums();
+    function openAlbum(album){ const body=document.createElement('div'); body.innerHTML=`<div class="flex items-center justify-between mb-3"><div class="font-semibold">${escapeHtml(album.titolo)}</div><div class="flex items-center gap-2"><label class="text-sm cursor-pointer inline-flex items-center gap-2">⬆️ <input id="img-upload" type="file" accept="image/*" multiple class="hidden"/> Carica immagini</label><button class="btn btn-outline btn-sm" id="share">🔗 Condividi</button></div></div><div id="gallery" class="grid grid-cols-3 md:grid-cols-4 gap-2"></div>`; const gallery=$('#gallery', body); function renderGallery(){ gallery.innerHTML=''; if(album.immagini.length===0) gallery.innerHTML='<div class="text-gray-500">Nessuna immagine. Usa “Carica immagini”.</div>'; album.immagini.forEach(img=>{ const wrap=document.createElement('div'); wrap.className='relative group'; wrap.innerHTML=`<img src="${img.url}" class="aspect-square object-cover rounded-lg shadow-sm"/><button class="absolute top-1 right-1 hidden group-hover:block bg-white/90 rounded-full px-2 py-1 text-xs">Elimina</button>`; $('button', wrap).addEventListener('click', ()=>{ album.immagini = album.immagini.filter(i=>i.id!==img.id); save(); renderGallery(); }); gallery.appendChild(wrap); }); } renderGallery();
+      $('#img-upload', body).addEventListener('change', (e)=>{ const files=e.target.files; if(!files||!files.length) return; const tasks=Array.from(files).map(f=>new Promise(res=>{ const r=new FileReader(); r.onload=()=>res({ id:uid(), url:r.result }); r.readAsDataURL(f); })); Promise.all(tasks).then(imgs=>{ album.immagini.push(...imgs); save(); renderGallery(); }); });
+      $('#share', body).addEventListener('click', ()=>{ const data=encodeURIComponent(JSON.stringify(album)); const shareUrl=location.origin+location.pathname+'#album='+data; navigator.clipboard.writeText(shareUrl).then(()=>toast('Link album copiato negli appunti')).catch(()=>toast('Impossibile copiare il link')); });
+      openModal('Album', body, [{label:'Chiudi',variant:'btn-outline',onClick:()=>closeModal()}]);
+    }
+  }
+
+  $('#btn-add-team').addEventListener('click', ()=>{ const body=document.createElement('div'); body.innerHTML='<label class="label">Nome squadra</label><input class="input mt-1" id="team-name" placeholder="Es. Under 16 Femminile" />'; openModal('Nuova Squadra', body, [{label:'Annulla',variant:'btn-outline',onClick:()=>closeModal()},{label:'Crea',onClick:()=>{ const name=$('#team-name',body).value.trim(); if(!name){ toast('Inserisci un nome'); return; } const t={ id:uid(), nome:name, atlete:[], gare:[], albums:[] }; state.teams.push(t); state.activeTeamId=t.id; save(); closeModal(); render(); }}]); });
+
+  function checkAndNotify(){ state.teams.forEach(team=>{ team.atlete.forEach(a=>{ const cert=daysUntil(a.certificatoScadenza); const auto=daysUntil(a.autocertScadenza); const nb=nextBirthdayISO(a.dataNascita||''); const bday=daysUntil(nb); const nm=(a.nome||'')+' '+(a.cognome||''); const notes=[]; if(cert!=null&&(cert===0||cert===7||cert===30||cert<0)){ notes.push(`Cert. Medico ${cert<0?'scaduto da '+(-cert)+'g':'in '+cert+'g'} — ${nm}`);} if(auto!=null&&(auto===0||auto===7||auto===30||auto<0)){ notes.push(`Autocert. ${auto<0?'scaduta da '+(-auto)+'g':'in '+auto+'g'} — ${nm}`);} if(a.dataNascita && bday===0) notes.push(`🎂 Compleanno oggi — ${nm}`); notes.forEach(msg=>notify(msg)); }); }); }
+  function notify(text){ toast(text); if('Notification' in window && Notification.permission==='granted'){ try{ new Notification('Promemoria Squadre',{ body:text }); }catch{} } }
+  $('#btn-ask-notify').addEventListener('click', async ()=>{ if(!('Notification' in window)){ toast('Notifiche non supportate dal browser'); return; } if(!window.isSecureContext){ toast('Le notifiche richiedono HTTPS o localhost'); return; } try{ const perm=await Notification.requestPermission(); toast(perm==='granted'?'Notifiche attivate':'Notifiche non attivate'); }catch{ toast('Impossibile richiedere il permesso'); } });
+  setInterval(checkAndNotify, 60*60*1000); document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkAndNotify(); });
+
+  function escapeHtml(s){ return String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }
+  function escapeAttr(s){ return escapeHtml(s).replace(/"/g,'&quot;'); }
+  function downloadFile(filename, content, type='text/plain'){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
+
+  window.addEventListener('hashchange', ()=>{ const m=location.hash.match(/album=(.+)$/); if(m){ try{ const album=JSON.parse(decodeURIComponent(m[1])); const team={ id:uid(), nome:'Album condiviso', atlete:[], gare:[], albums:[album] }; state.teams.push(team); state.activeTeamId=team.id; state.activeTab='album'; save(); render(); toast('Album importato'); location.hash=''; }catch{} } });
+
+  render(); checkAndNotify();
+  </script>
+</body>
+</html>
