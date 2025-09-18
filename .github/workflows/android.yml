@@ -1,0 +1,53 @@
+PS C:\Users\malessandri\Downloads\gestione-squadre-apk-starter> git init
+git : Termine 'git' non riconosciuto come nome di cmdlet, funzione, programma eseguibile o file script. Controllare
+l'ortografia del nome o verificare che il percorso sia incluso e corretto, quindi riprovare.
+In riga:1 car:1
++ git init
++ ~~~
+    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\malessandri\Downloads\gestione-squadre-apk-starter> git add .
+git : Termine 'git' non riconosciuto come nome di cmdlet, funzione, programma eseguibile o file script. Controllare
+l'ortografia del nome o verificare che il percorso sia incluso e corretto, quindi riprovare.
+In riga:1 car:1
++ git add .
++ ~~~
+    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\malessandri\Downloads\gestione-squadre-apk-starter> git commit -m "init app"
+git : Termine 'git' non riconosciuto come nome di cmdlet, funzione, programma eseguibile o file script. Controllare
+l'ortografia del nome o verificare che il percorso sia incluso e corretto, quindi riprovare.
+In riga:1 car:1
++ git commit -m "init app"
++ ~~~
+    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\malessandri\Downloads\gestione-squadre-apk-starter> git branch -M main
+git : Termine 'git' non riconosciuto come nome di cmdlet, funzione, programma eseguibile o file script. Controllare
+l'ortografia del nome o verificare che il percorso sia incluso e corretto, quindi riprovare.
+In riga:1 car:1
++ git branch -M main
++ ~~~
+    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\malessandri\Downloads\gestione-squadre-apk-starter> git remote add origin https://github.com/<tuo-utente>/<nome-repo>.git
+git : Termine 'git' non riconosciuto come nome di cmdlet, funzione, programma eseguibile o file script. Controllare
+l'ortografia del nome o verificare che il percorso sia incluso e corretto, quindi riprovare.
+In riga:1 car:1
++ git remote add origin https://github.com/<tuo-utente>/<nome-repo>.git
++ ~~~
+    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\malessandri\Downloads\gestione-squadre-apk-starter> git push -u origin main
+git : Termine 'git' non riconosciuto come nome di cmdlet, funzione, programma eseguibile o file script. Controllare
+l'ortografia del nome o verificare che il percorso sia incluso e corretto, quindi riprovare.
+In riga:1 car:1
++ git push -u origin main
++ ~~~
+    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
